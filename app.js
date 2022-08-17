@@ -3,18 +3,30 @@ const dotenv=require('dotenv')
 const express= require('express');
 const mongoose=require('mongoose');
 const rateLimit=require('express-rate-limit');
+const helmet=require('helmet');
+const xss=require('xss-clean');
+const mongoSanitize=require('express-mongo-sanitize');
 
 const userRouter=require('./routes/userRoutes')
 const AppError=require('./utils/AppError');
 const globalError=require('./controller/errorController');
+
+
 const app=express();
 
+//Middleware for securing HTTP headers
+app.use(helmet());
+
+//Handle Exceptions
 process.on("uncaughtException",err=>{
     console.log("UNCAUGHT EXCEPTION 💥💥💥");
     console.log(err.name, err.message);
     process.exit(1);
     
 })
+
+
+//Middleware for limiting number of request per hour
 
 const limiter=rateLimit({
     max:100,
@@ -28,7 +40,15 @@ if(process.env.NODE_ENV=="development"){
     app.use(morgan('dev'));
 }
 app.use(express.json());
+
+//use limiter
 app.use('/api', limiter);
+
+//Data Sanitization against No-SQL attack
+app.use(mongoSanitize());
+
+//Protect against Cross Script attack
+app.use(xss());
 const port=3000;
 
 
