@@ -1,4 +1,5 @@
 const User=require('../model/userModel');
+const AppError = require('../utils/AppError');
 const catchAsync = require('../utils/catchAsync');
 
 exports.createUser=catchAsync(async (req,res)=>{
@@ -32,14 +33,26 @@ exports.getUser=catchAsync(async(req,res)=>{
         
 })
 
-exports.updateUser=catchAsync(async (req,res)=>{
-        const user=await User.findByIdAndUpdate(req.params.id,{
-            new:true
+exports.updateUser=catchAsync(async (req,res,next)=>{
+        const filterObject=(obj,...allowedObjects)=>{
+            const newObj={};
+            Object.keys(obj).forEach(element => {
+                if(allowedObjects.includes(element)) newObj[element]=obj[element]  
+            });
+        }
+        const filteredBody=filterObject(req.body, 'username','email');
+
+        if(req.body.password || req.body.passwordConfirm){
+            return next(new AppError("Your not Allowed to Update Password here, please use another route",500))
+        }
+        const updatedUser=await User.findByIdAndUpdate(req.user.id,filteredBody,{
+            new:true,
+            runValidators:true
         });
     
         res.status(200).json({
             status:"Success",
-            user
+            user:updatedUser
         })   
 })
 

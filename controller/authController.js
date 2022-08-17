@@ -4,18 +4,30 @@ const User=require('../model/userModel');
 const AppError = require('../utils/AppError');
 const catchAsync = require('../utils/catchAsync');
 const sendmail=require('../utils/sendEmail');
+const crypto=require('crypto');
 
-exports.signup=catchAsync( async (req,res)=>{
-    const user=await User.create(req.body);
+
+const createSendToken=(user,statusCode,res)=>{
     const token=jwt.sign({id:user._id},process.env.JWT_KEY,{expiresIn:process.env.JWT_EXPIRE});
-
-    res.status(200).json({
+    const cookieOptions={
+        expires:new Date(Date.now()+30*24*60*60*1000),
+        httpOnly:true,
+    }
+    if(process.env.NODE_ENV=='production') cookieOptions.secure=true
+    res.cookie('jwt',token,cookieOptions)
+     user.password=undefined
+    res.status(statusCode).json({
         status:"Success",
         token,
         data:{
-            user,
+            user
         }
     })
+}
+
+exports.signup=catchAsync( async (req,res,next)=>{
+    const user=await User.create(req.body);
+    createSendToken(user,200,res)
 })
 
 exports.login=catchAsync( async(req,res,next)=>{
@@ -115,4 +127,51 @@ exports.forgotPassword=catchAsync(async(req,res,next)=>{
    
 })
 
-exports.resetPassword=(req,res,next)=>{};
+exports.resetPassword=catchAsync(async(req,res,next)=>{
+    //get user based on token.
+    const hashedResetToken=crypto.createHash('sha256').update(req.params.token).digest('hex');
+
+    const user=await User.findOne({passwordResetToken:hashedResetToken,resetExpires:{$gt:Date.now()}});
+
+    //set the new Password if user exits and token not expired.
+    if(!user){
+        return next(new AppError("User with this token doesn't exit or token expired"))
+    }
+
+    user.password=req.body.password;
+    user.passwordConfirm=req.body.passwordConfirm;
+    user.passwordResetToken=undefined;
+    user.resetExpires=undefined;
+
+    await user.save();
+    // send new Token and Success response message.
+    const token=jwt.sign({id:user._id},process.env.JWT_KEY,{expiresIn:process.env.JWT_EXPIRE});
+    res.status(200).json({
+        status:"Success",
+        token,
+        message:"Password Changed/Reset Successfully",
+    })
+});
+
+exports.updatePassword=catchAsync(async(req,res,next)=>{
+    //find user by Id and Password
+    const user=await User.findById(req.params.id).select('+password');
+
+    //update the password
+    
+    if(!(await user.correctPassword(req.body.password, user.password))){
+        return next(new AppError("Invalid Id or your current password is wrong"));
+    }
+
+    user.password=req.body.password;
+    user.passwordConfirm=req.body.passwordConfirm,
+    await user.save()
+
+    const token=jwt.sign({id:user._id},process.env.JWT_KEY,{expiresIn:process.env.JWT_EXPIRE});
+    res.status(200).json({
+        status:"Success",
+        token,
+        message:"Password Updated Successfully",
+    })
+
+})

@@ -1,7 +1,9 @@
-// const bodyParser = require('body-parser');
+const morgan=require('morgan')
 const dotenv=require('dotenv')
 const express= require('express');
 const mongoose=require('mongoose');
+const rateLimit=require('express-rate-limit');
+
 const userRouter=require('./routes/userRoutes')
 const AppError=require('./utils/AppError');
 const globalError=require('./controller/errorController');
@@ -14,9 +16,19 @@ process.on("uncaughtException",err=>{
     
 })
 
+const limiter=rateLimit({
+    max:100,
+    window:60*60*1000,
+    message:"Too Many Request from this IP please try again after 1 hour"
+})
+
 dotenv.config({path:'./env/config.env'});
 
+if(process.env.NODE_ENV=="development"){
+    app.use(morgan('dev'));
+}
 app.use(express.json());
+app.use('/api', limiter);
 const port=3000;
 
 
@@ -29,14 +41,6 @@ mongoose.connect(process.env.DATABASE,{
 app.use('/api/v1/users',userRouter);
 
 app.all('*',(req,res,next)=>{
-    // res.status(404).json({
-    //     status:"Fail",
-    //     message:`cant find ${req.originalUrl} on this server`
-    // })
-    // const err=new Error(`Can't find ${req.originalUrl} on this server `);
-    // err.status="fail";
-    // err.statusCode=404;
-
     next(new AppError(`Can't find ${req.originalUrl} on this server `,404))
 })
 

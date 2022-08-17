@@ -6,12 +6,14 @@ const crypto=require('crypto')
 const userSchema=new mongoose.Schema({
     username:{
         type:String,
+        unique:[true,"username already taken"],
         required:[true,"Username is required"]
     },
 
     email:{
         type:String,
         required:true,
+        unique:[true,"email address should be unique"],
         lowercase:true,
         validate:[validator.isEmail,"Please Provide Valid Email"]
     },
@@ -36,6 +38,10 @@ const userSchema=new mongoose.Schema({
         enum:['user','admin'],
         default:'user'
     },
+    active:{
+        type:String,
+        default:'active'
+    },
     passwordChangedAt:Date,
     passwordResetToken:String,
     resetExpires:Date,
@@ -47,6 +53,14 @@ userSchema.pre('save',async function(next){
   if(!this.isModified('password')) return next();
   this.password=await bcrypt.hash(this.password,12);
   this.passwordConfirm=undefined
+})
+
+userSchema.pre('save',function(next){
+    if(!this.isModified('password') || this.isNew) return next();
+
+    this.passwordChangedAt=Date.now()-1000;
+
+    next();
 })
 
 userSchema.methods.correctPassword=async function(candidatePassword,userPassword){
